@@ -4,41 +4,35 @@ import browser_cookie3
 
 class Redfin:
     def __init__(self):
-        self.base = 'https://redfin.com/stingray/'
-        self.user_agent_header = {
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'accept-language': 'en-US,en;q=0.9',
-            'cookie': self.load_chrome_cookies('redfin.com'),
-            'priority': 'u=0, i',
-            'sec-ch-ua': '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"macOS"',
-            'sec-fetch-dest': 'document',
-            'sec-fetch-mode': 'navigate',
-            'sec-fetch-site': 'none',
-            'sec-fetch-user': '?1',
-            'upgrade-insecure-requests': '1',
+        self.base = 'https://www.redfin.com/stingray/'
+        
+        self.headers = {
+            'cookie': self.load_chrome_cookies(['www.redfin.com','redfin.com']),
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
         }
-
+        
     def load_chrome_cookies(self, domain):
         """Loads Chrome cookies for a specific domain."""
         cj = browser_cookie3.chrome()
-        cookies = [
-            f'{cookie.name}={cookie.value}' for cookie in cj if domain in cookie.domain]
+        cookies = []
+        for d in domain:
+            cookie = [f'{cookie.name}={cookie.value}' for cookie in cj if d in cookie.domain]
+            
+            cookies.extend(cookie)
+             
         return ';'.join(cookies)
 
     def meta_property(self, url, kwargs, page=False):
         if page:
-            kwargs['pageType'] = 3
+            kwargs['pageType'] = "3"
         return self.meta_request('api/home/details/' + url, {
-            'accessLevel': 1,
+            'accessLevel': "1",
             **kwargs
         })
 
     def meta_request(self, url, kwargs):
-        response = requests.get(
-            self.base + url, params=kwargs, headers=self.user_agent_header)
+        response = requests.request("GET",
+            self.base + url, data = '', params=kwargs, headers=self.headers)
         response.raise_for_status()
         return json.loads(response.text[4:])
 
@@ -59,7 +53,7 @@ class Redfin:
 
     # Property ID Requests
     def below_the_fold(self, property_id, **kwargs):
-        return self.meta_property('belowTheFold', {'propertyId': property_id, **kwargs}, page=True)
+        return self.meta_property('belowTheFold', {'propertyId': f"{property_id}", **kwargs}, page=True)
 
     def hood_photos(self, property_id, **kwargs):
         return self.meta_request('api/home/details/hood-photos', {'propertyId': property_id, **kwargs})
