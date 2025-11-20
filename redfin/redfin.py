@@ -1,26 +1,68 @@
-import requests
+
 import json
+import requests
 import browser_cookie3
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
 class Redfin:
     def __init__(self):
         self.base = 'https://www.redfin.com/stingray/'
         
         self.headers = {
-            'cookie': self.load_chrome_cookies(['www.redfin.com','redfin.com']),
+            'cookie': self.load_chrome_cookies(False, 'redfin.com'),
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
         }
         
-    def load_chrome_cookies(self, domain):
+    def load_chrome_cookies(self, force, domain):
         """Loads Chrome cookies for a specific domain."""
-        cj = browser_cookie3.chrome()
-        cookies = []
-        for d in domain:
-            cookie = [f'{cookie.name}={cookie.value}' for cookie in cj if d in cookie.domain]
-            
-            cookies.extend(cookie)
-             
-        return ';'.join(cookies)
+        if force:
+            cookies = self.get_chrome_cookies_exact(domain)
+            cookie = [f'{c["name"]}={c['value']}' for c in cookies]
+        else:
+            # Look for cookies.txt file in root
+            try:
+                with open('cookies.txt', 'r') as f:
+                    return f.read()
+            except FileNotFoundError:
+                cj = browser_cookie3.chrome()
+                cj = [c for c in cj if c.domain.endswith(domain)]
+                cookie = [f'{cookie.name}={cookie.value}' for cookie in cj if cookie.domain.endswith(domain)]
+        
+        cooks = ';'.join(cookie)
+        with open('cookies.txt', 'w') as f:
+            f.write(cooks)
+        
+        return cooks
+
+
+    def get_chrome_cookies_exact(self, url: str):
+        """
+        Returns ALL cookies visible in Chrome DevTools for the given URL.
+        Uses Chrome DevTools Protocol (CDP): Network.getCookies.
+        """
+        # --- Launch Chrome with CDP ---
+        chrome_options = Options()
+        chrome_options.add_argument("--remote-debugging-port=9222")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+
+        driver = webdriver.Chrome(options=chrome_options)
+
+        # --- Load the page (important: Chrome will populate cookies for its TLD) ---
+        if not url.startswith('https://www.'):
+            url = 'https://www.' + url
+        
+        driver.get(url)
+
+        # --- Fetch cookies via CDP (this is what DevTools uses) ---
+        raw = driver.execute_cdp_cmd("Network.getCookies", {})
+
+        cookies = raw.get("cookies", [])
+
+        driver.quit()
+        return cookies
 
     def meta_property(self, url, kwargs, page=False):
         if page:
@@ -29,12 +71,20 @@ class Redfin:
             'accessLevel': "1",
             **kwargs
         })
+        
 
     def meta_request(self, url, kwargs):
-        response = requests.request("GET",
-            self.base + url, data = '', params=kwargs, headers=self.headers)
-        response.raise_for_status()
-        return json.loads(response.text[4:])
+        try:
+            response = requests.request("GET",
+                self.base + url, data = '', params=kwargs, headers=self.headers)
+            response.raise_for_status()
+            return json.loads(response.text[4:])
+        except:
+            headers = self.load_chrome_cookies(True, 'redfin.com')
+            response = requests.request("GET",
+                self.base + url, data='', params=kwargs, headers=headers)
+            response.raise_for_status()
+            return json.loads(response.text[4:])
 
     # Url Requests
 
